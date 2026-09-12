@@ -51,7 +51,6 @@ jobs:
       - name: Exact upstream Rust toolchain action
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
         with:
-          toolchain: 1.95.0
           targets: x86_64-pc-windows-msvc
           components: clippy,rustfmt,rust-src
       - name: Verify source, patch, build and run synthetic-only checks

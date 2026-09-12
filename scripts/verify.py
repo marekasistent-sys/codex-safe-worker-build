@@ -1,5 +1,6 @@
 """Build recipe supervisor. No credentials, client auth, model or remote dispatch API."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -17,6 +18,38 @@ TARGET = 'x86_64-pc-windows-msvc'
 SOURCE = Path('codex-rs/http-client/src/client.rs')
 ORIGINAL_BLOB = '9cda749aa27581101a4f718644151f88c508100d'
 STEPS = []
+PHASES = frozenset(('RUST_VERSION_PROBE','CARGO_VERSION_PROBE','SOURCE_PREPARE',
+    'HTTP_CLIENT_LIB_TEST','CODEX_CLI_LIB_COMPILE','SYNTHETIC_TEST_COMPILE',
+    'SYNTHETIC_TEST','CODEX_RELEASE_BUILD'))
+
+@contextmanager
+def phase(name):
+    if name not in PHASES:
+        raise RuntimeError('DIAGNOSTIC_PHASE_INVALID')
+    print(name+'_START', flush=True)
+    try:
+        yield
+    except BaseException:
+        # No exception value, command, path, stdout or stderr is exported.
+        raise RuntimeError(name+'_FAILED') from None
+    print(name+'_PASS', flush=True)
+
+def classify(data):
+    data=data.lower()
+    patterns=(('LOCKFILE_REJECTED',(b'lock file',b'needs to be updated')),
+              ('DEPENDENCY_RESOLUTION_FAILED',(b'failed to select a version',)),
+              ('DEPENDENCY_DOWNLOAD_FAILED',(b'failed to download',)),
+              ('GIT_FETCH_FAILED',(b'failed to fetch',)),
+              ('LINKER_FAILED',(b'linking with',b'failed')),
+              ('BUILD_SCRIPT_FAILED',(b'failed to run custom build command',)),
+              ('RUST_COMPILER_ERROR',(b'error[e',)),
+              ('TEST_ASSERTION_FAILED',(b'panicked at',)),
+              ('LIB_TARGET_MISSING',(b'no library targets found',)))
+    return [label for label,terms in patterns if all(t in data for t in terms)] or ['UNKNOWN']
+
+def phase_command(name,args,cwd,env):
+    with phase(name):
+        return command(args,cwd,env)
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -49,9 +82,8 @@ def command(args, cwd, env=None, timeout=7200):
     p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, timeout=timeout)
     if p.returncode:
         # No arbitrary exception, compiler output, stdout, environment or payload export.
-        diagnostic = (p.stdout + p.stderr).lower()
-        missing = [n for n in ('nasm', 'cmake', 'ninja', 'clang', 'link.exe', 'openssl') if n.encode() in diagnostic]
-        raise RuntimeError('COMMAND_FAILED' + ('_REVIEW_DEPENDENCIES_' + '_'.join(missing).upper().replace('.','_') if missing else ''))
+        print(json.dumps({'diagnostic_categories':classify(p.stdout+p.stderr)}),flush=True)
+        raise RuntimeError('COMMAND_FAILED')
     return p.stdout
 
 def verify_bundle():
@@ -107,12 +139,13 @@ def run(source):
     rustc = shutil.which('rustc', path=env['PATH'])
     if not cargo or not rustc:
         raise RuntimeError('MISSING_RUST_TOOLCHAIN')
-    rust_version = command([rustc, '--version'], ROOT, env).decode().strip()
-    cargo_version = command([cargo, '--version'], ROOT, env).decode().strip()
+    rust_version = phase_command('RUST_VERSION_PROBE',[rustc, '--version'], ROOT, env).decode().strip()
+    cargo_version = phase_command('CARGO_VERSION_PROBE',[cargo, '--version'], ROOT, env).decode().strip()
     if not rust_version.startswith('rustc 1.95.0 ') or not cargo_version.startswith('cargo 1.95.0 '):
         raise RuntimeError('RUST_VERSION_MISMATCH')
     runner.update(rustc=rust_version, cargo=cargo_version)
-    prepare(source)
+    with phase('SOURCE_PREPARE'):
+        prepare(source)
     cwd = source / 'codex-rs'
     target_dir = Path(os.environ['RUNNER_TEMP']) / 'codex-safe-target'
     if target_dir.exists():
@@ -127,11 +160,11 @@ def run(source):
         env['CODEX_HOME'] = str(root / 'empty-home')
         (root / 'empty-home').mkdir()
         base = [cargo, 'test', '--locked', '--release', '--target', TARGET]
-        command(base + ['-p','codex-http-client','--lib'], cwd, env)
+        phase_command('HTTP_CLIENT_LIB_TEST',base + ['-p','codex-http-client','--lib'], cwd, env)
         STEPS.append('upstream_http_client_lib_PASS')
-        command(base + ['-p','codex-cli','--lib','--no-run'], cwd, env)
+        phase_command('CODEX_CLI_LIB_COMPILE',base + ['-p','codex-cli','--lib','--no-run'], cwd, env)
         STEPS.append('codex_cli_lib_compile_PASS')
-        raw = command(base + ['-p','codex-app-server','--test','worker_safe_logging','--no-run','--message-format=json'], cwd, env)
+        raw = phase_command('SYNTHETIC_TEST_COMPILE',base + ['-p','codex-app-server','--test','worker_safe_logging','--no-run','--message-format=json'], cwd, env)
         executables = []
         for line in raw.splitlines():
             try:item = json.loads(line)
@@ -146,17 +179,18 @@ def run(source):
         seed = secrets.token_hex(16)
         values = markers(seed)
         test_env = dict(env, SAFE_LOGGING_SEED=seed, SAFE_LOGGING_ROOT=str(root))
-        p = subprocess.run([str(exe), '--exact', 'worker_safe_logging', '--test-threads=1'], cwd=cwd, env=test_env, capture_output=True, timeout=90)
-        if contains_marker(p.stdout + p.stderr, values):
-            raise RuntimeError('SYNTHETIC_STDIO_LEAK')
-        scan_tree(root, values)
-        if p.returncode:
-            raise RuntimeError('SYNTHETIC_TEST_FAILED_NO_PAYLOAD_EXPORTED')
-        summary = json.loads((root / 'summary.json').read_text())
-        if summary.get('secret_matches') != 0 or summary.get('request_completed_events') != 2 or summary.get('wal_shm_checked') is not True:
-            raise RuntimeError('SYNTHETIC_SUMMARY_INVALID')
+        with phase('SYNTHETIC_TEST'):
+            p = subprocess.run([str(exe), '--exact', 'worker_safe_logging', '--test-threads=1'], cwd=cwd, env=test_env, capture_output=True, timeout=90)
+            if contains_marker(p.stdout + p.stderr, values):
+                raise RuntimeError('SYNTHETIC_STDIO_LEAK')
+            scan_tree(root, values)
+            if p.returncode:
+                raise RuntimeError('SYNTHETIC_TEST_FAILED_NO_PAYLOAD_EXPORTED')
+            summary = json.loads((root / 'summary.json').read_text())
+            if summary.get('secret_matches') != 0 or summary.get('request_completed_events') != 2 or summary.get('wal_shm_checked') is not True:
+                raise RuntimeError('SYNTHETIC_SUMMARY_INVALID')
         STEPS.append('synthetic_http_sqlite_wal_shm_stdio_PASS')
-        command([cargo,'build','--locked','--release','--target',TARGET,'-p','codex-cli','--bin','codex'], cwd, env)
+        phase_command('CODEX_RELEASE_BUILD', [cargo,'build','--locked','--release','--target',TARGET,'-p','codex-cli','--bin','codex'], cwd, env)
         STEPS.append('codex_cli_release_build_PASS')
         binary = target_dir / TARGET / 'release/codex.exe'
         if not binary.is_file():
@@ -191,10 +225,16 @@ def main():
         if args.source is None:raise RuntimeError('SOURCE_REQUIRED')
         run(args.source.resolve())
 
+
+SAFE_ERRORS=frozenset(('ARTIFACT_ALLOWLIST_FAILED','ARTIFACT_DIR_NOT_FRESH','COMMAND_FAILED','DIAGNOSTIC_PHASE_INVALID','HEADER_LOGGING_REMAINS','MISSING_RUST_TOOLCHAIN','PATCH_SCOPE_CHANGED','PINNED_SOURCE_FRAGMENT_MISMATCH','RECIPE_INTEGRITY_FAILED','RELEASE_BINARY_MISSING','REMOTE_RUN_REQUIRES_EXPLICITLY_DISPATCHED_ACTION','REPARSE_DENIED','RUST_VERSION_MISMATCH','SOURCE_COMMIT_MISMATCH','SOURCE_NOT_CLEAN','SOURCE_REQUIRED','SYNTHETIC_BINARY_NOT_FOUND','SYNTHETIC_BINARY_PATH_DENIED','SYNTHETIC_SECRET_DETECTED','SYNTHETIC_STDIO_LEAK','SYNTHETIC_SUMMARY_INVALID','SYNTHETIC_TEST_COLLISION','SYNTHETIC_TEST_FAILED_NO_PAYLOAD_EXPORTED','TARGET_DIR_NOT_FRESH','UNEXPECTED_EVENT_COUNT',)) | frozenset(n+'_FAILED' for n in PHASES)
+def safe_error(exc):
+    if type(exc) is RuntimeError and len(exc.args)==1 and type(exc.args[0]) is str and exc.args[0] in SAFE_ERRORS:
+        return exc.args[0]
+    return 'FAIL_CLOSED_NO_PAYLOAD_EXPORTED'
+
 if __name__ == '__main__':
     try:main()
     except BaseException as exc:
         # Only our fixed diagnostic vocabulary, never OS/provider exception text.
-        text = str(exc)
-        print(text if re.fullmatch(r'[A-Z0-9_]{3,160}',text) else 'FAIL_CLOSED_NO_PAYLOAD_EXPORTED')
+        print(safe_error(exc))
         sys.exit(1)
