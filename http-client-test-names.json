@@ -1,0 +1,168 @@
+{
+  "source_commit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+  "names": [
+    "chatgpt_cloudflare_cookies::tests::additional_cookies_are_restricted_to_https_chatgpt_hosts",
+    "chatgpt_cloudflare_cookies::tests::additional_cookies_use_current_path_scoped_cloudflare_cookies",
+    "chatgpt_cloudflare_cookies::tests::allows_only_known_cloudflare_cookie_names",
+    "chatgpt_cloudflare_cookies::tests::does_not_return_chatgpt_cloudflare_cookies_for_other_hosts",
+    "chatgpt_cloudflare_cookies::tests::ignores_mixed_non_cloudflare_cookies_for_chatgpt_hosts",
+    "chatgpt_cloudflare_cookies::tests::ignores_non_chatgpt_cookies",
+    "chatgpt_cloudflare_cookies::tests::ignores_non_cloudflare_cookies_for_chatgpt_hosts",
+    "chatgpt_cloudflare_cookies::tests::only_allows_https_urls",
+    "chatgpt_cloudflare_cookies::tests::rejects_plain_http_chatgpt_cookie_urls",
+    "chatgpt_cloudflare_cookies::tests::stores_and_returns_cloudflare_cookies_for_chatgpt_hosts",
+    "chatgpt_hosts::tests::recognizes_chatgpt_hosts_without_suffix_tricks",
+    "client::tests::inject_trace_headers_uses_current_span_context",
+    "client_builder::tests::custom_ca_fallback_preserves_builder_configuration",
+    "custom_ca::tests::ca_path_falls_back_to_ssl_cert_file",
+    "custom_ca::tests::ca_path_ignores_empty_values",
+    "custom_ca::tests::ca_path_prefers_codex_env",
+    "custom_ca::tests::rustls_config_reports_invalid_ca_file",
+    "custom_ca::tests::rustls_config_uses_custom_ca_bundle_when_configured",
+    "outbound_proxy::redirect_integration_tests::route_aware_pool_re_resolves_redirects_and_logs_only_final_outcome",
+    "outbound_proxy::tests::async_resolution_uses_cached_route_before_global_permit",
+    "outbound_proxy::tests::cloned_factories_share_chatgpt_cookie_stores_without_changing_value_equality",
+    "outbound_proxy::tests::enabled_environment_proxy_routes_request_through_proxy",
+    "outbound_proxy::tests::environment_fallback_reads_injected_proxy_environment",
+    "outbound_proxy::tests::macos_proxy_configuration_rejects_invalid_destination",
+    "outbound_proxy::tests::no_proxy_matches_exact_suffix_wildcard_and_port",
+    "outbound_proxy::tests::parses_pac_proxy_tokens",
+    "outbound_proxy::tests::parses_static_winhttp_proxy_entries_for_target_scheme",
+    "outbound_proxy::tests::proxy_env_value_matches_reqwest_casing_precedence",
+    "outbound_proxy::tests::reports_direct_and_unsupported_proxy_tokens",
+    "outbound_proxy::tests::reqwest_default_route_preserves_transport_proxy_behavior",
+    "outbound_proxy::tests::route_aware_builder_preserves_default_headers",
+    "outbound_proxy::tests::route_aware_pool_logs_only_the_final_redirect_outcome",
+    "outbound_proxy::tests::route_aware_pool_uses_respect_system_proxy_route_for_exact_url",
+    "outbound_proxy::tests::system_proxy_cache_is_bounded",
+    "outbound_proxy::tests::system_proxy_cache_key_preserves_url_specific_pac_decisions",
+    "outbound_proxy::tests::system_proxy_resolution_is_single_flight",
+    "outbound_proxy::tests::unavailable_system_proxy_decision_is_cached",
+    "outbound_proxy::tests::unavailable_system_route_preserves_wss_http_proxy_fallback",
+    "outbound_proxy::tests::unavailable_system_route_resolves_environment_or_direct_explicitly",
+    "outbound_proxy::tests::websocket_route_uses_http_equivalent_for_system_resolution",
+    "request::tests::into_prepared_stores_compressed_body_for_reuse",
+    "request::tests::prepare_body_for_send_rejects_existing_content_encoding_when_compressing",
+    "request::tests::prepare_body_for_send_serializes_json_and_sets_content_type",
+    "route_aware_client_pool::tests::bounds_cached_routes_and_rebuilds_an_evicted_route",
+    "route_aware_client_pool::tests::cached_tls_backend_only_changes_its_destination_and_route",
+    "route_aware_client_pool::tests::disabled_pool_logging_does_not_expose_request_or_response_data",
+    "route_aware_client_pool::tests::forwards_exact_urls_and_caches_clients_by_resolved_route",
+    "route_aware_client_pool::tests::legacy_custom_ca_fallback_is_limited_to_reqwest_default",
+    "route_aware_client_pool::tests::no_redirect_pool_returns_redirect_response",
+    "route_aware_client_pool::tests::rejects_redirects_beyond_the_limit",
+    "route_aware_client_pool::tests::rejects_replayable_redirect_to_unsupported_scheme",
+    "route_aware_client_pool::tests::request_builder_debug_redacts_url_secrets",
+    "route_aware_client_pool::tests::request_failures_classify_https_proxy_authentication_challenges",
+    "route_aware_client_pool::tests::request_failures_classify_real_untrusted_certificate_handshakes",
+    "route_aware_client_pool::tests::request_timeout_covers_route_selection",
+    "route_aware_client_pool::tests::request_timeout_is_shared_across_redirect_hops",
+    "route_aware_client_pool::tests::reqwest_default_route_preserves_transport_redirects",
+    "route_aware_client_pool::tests::streams_request_bodies_without_exposing_reqwest_body",
+    "route_aware_client_pool::tests::tls_fallback_pool_reselects_routes_for_each_redirect_hop",
+    "route_aware_client_pool::tests::without_url_redacts_transport_error_urls",
+    "route_aware_client_pool::tls_fallback_tests::default_pool_does_not_retry_a_native_tls_protocol_failure",
+    "route_aware_client_pool::tls_fallback_tests::does_not_retry_a_cached_rustls_tls_protocol_failure",
+    "route_aware_client_pool::tls_fallback_tests::does_not_retry_a_non_replayable_streaming_request",
+    "route_aware_client_pool::tls_fallback_tests::retries_a_native_tls_failure_after_another_request_caches_rustls",
+    "route_aware_client_pool::tls_fallback_tests::retries_a_native_tls_protocol_failure_once_with_rustls",
+    "route_aware_client_pool::tls_fallback_tests::retries_a_tls_protocol_failure_when_request_url_contains_certificate_markers",
+    "route_aware_client_pool::tls_fallback_tests::successful_rustls_fallback_replays_the_request_and_reuses_the_destination",
+    "route_aware_redirect::tests::non_replayable_redirect_is_not_followed_regardless_of_target_scheme",
+    "route_aware_redirect::tests::redirect_credentials_are_retained_only_for_the_same_origin",
+    "route_aware_redirect::tests::redirect_referer_follows_strict_origin_when_cross_origin",
+    "route_aware_redirect::tests::redirects_match_reqwest_method_and_body_rules",
+    "tls_backend_fallback::tests::cached_rustls_clients_are_reused_for_the_same_outbound_route",
+    "tls_backend_fallback::tests::cached_rustls_destinations_remain_bounded_while_sharing_a_route_client",
+    "tls_backend_fallback::tests::certificate_errors_in_an_error_source_never_enable_fallback",
+    "tls_backend_fallback::tests::evicting_a_destination_removes_its_unshared_route_client",
+    "tls_backend_fallback::tests::recognizes_platform_specific_tls_protocol_negotiation_failures",
+    "tls_backend_fallback::tests::recognizes_schannel_protocol_version_error_codes",
+    "tls_backend_fallback::tests::rustls_fallback_decisions_are_scoped_to_origin_and_outbound_route",
+    "transport::tests::connection_failures_are_classified_without_exposing_request_urls",
+    "transport::tests::disabled_request_logging_suppresses_transport_url_and_body",
+    "transport::tests::enabled_request_logging_emits_transport_url_and_body"
+  ],
+  "source_blobs": [
+    {
+      "file": "codex-rs/http-client/src/chatgpt_cloudflare_cookies.rs",
+      "blob": "a2abde31a9e241ffca7fbf1438b1be30be4ddadc"
+    },
+    {
+      "file": "codex-rs/http-client/src/chatgpt_hosts.rs",
+      "blob": "0426c8bb36b29de0b79602aa1a176f5e76305398"
+    },
+    {
+      "file": "codex-rs/http-client/src/client.rs",
+      "blob": "9cda749aa27581101a4f718644151f88c508100d"
+    },
+    {
+      "file": "codex-rs/http-client/src/client_builder.rs",
+      "blob": "9f374293a1025c875bf0cc24be48c7201993c50c"
+    },
+    {
+      "file": "codex-rs/http-client/src/custom_ca.rs",
+      "blob": "5a2e51c32068921eea2a07ceed5e0a35245280e1"
+    },
+    {
+      "file": "codex-rs/http-client/src/error.rs",
+      "blob": "e3a4f8aca647b723547a4b6548eb9058fa0fb220"
+    },
+    {
+      "file": "codex-rs/http-client/src/outbound_proxy.rs",
+      "blob": "27d1a80587d2a018d6774e0c8f7aa4e59dcb7556"
+    },
+    {
+      "file": "codex-rs/http-client/src/request.rs",
+      "blob": "7608860c3daa7d43f846a43d525514d8604bfe07"
+    },
+    {
+      "file": "codex-rs/http-client/src/route_aware_client_pool.rs",
+      "blob": "29705e44eb66f235adee5a8932264ee778f98ced"
+    },
+    {
+      "file": "codex-rs/http-client/src/route_aware_redirect.rs",
+      "blob": "77af745725e66dee0112e240c95030065318978d"
+    },
+    {
+      "file": "codex-rs/http-client/src/tls_backend_fallback.rs",
+      "blob": "760df1824ad752fe8d4b5f3f2b0d0e3e848c0144"
+    },
+    {
+      "file": "codex-rs/http-client/src/transport.rs",
+      "blob": "337b1e86759e230cc32823e50a98292a78c1b9d3"
+    },
+    {
+      "file": "codex-rs/http-client/src/route_aware_tls_fallback_tests.rs",
+      "blob": "e5968030907599d7cdcdc608824aa27c4815c54a"
+    },
+    {
+      "file": "codex-rs/http-client/src/client_builder_tests.rs",
+      "blob": "0b4cbb4b7d0230bf6e91a49a03b7421088cf9c04"
+    },
+    {
+      "file": "codex-rs/http-client/src/route_aware_redirect_integration_tests.rs",
+      "blob": "91119ca08c3281d8a4bb9a89dbe2d9c0654ce563"
+    },
+    {
+      "file": "codex-rs/http-client/src/outbound_proxy_tests.rs",
+      "blob": "22b3716d9cf9cfad119d7256362d90b2907c5da2"
+    },
+    {
+      "file": "codex-rs/http-client/src/route_aware_client_pool_tests.rs",
+      "blob": "e3848397bd5b646cb99cacda2ae6a21f1170e0cc"
+    },
+    {
+      "file": "codex-rs/http-client/src/route_aware_redirect_tests.rs",
+      "blob": "d9e8f6053f3e61a1bba7db149cd295bb42de1df5"
+    },
+    {
+      "file": "codex-rs/http-client/src/tls_backend_fallback_tests.rs",
+      "blob": "c7ca0adceb94a6729d8657c7a7feb4e066044f68"
+    },
+    {
+      "file": "codex-rs/http-client/src/transport_tests.rs",
+      "blob": "a8ab11aba5cfe6830daaf1dd00a7db698fe73f4e"
+    }
+  ]
+}

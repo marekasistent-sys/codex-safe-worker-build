@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from http_test_failures import failure_names
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = '3d2ee51ca2d5db578f328aa75e20aa22c0197c9a'
@@ -49,6 +50,8 @@ def classify(data):
 
 def phase_command(name,args,cwd,env):
     with phase(name):
+        if name=='HTTP_CLIENT_LIB_TEST':
+            return command(args,cwd,env,http_test_names=True)
         return command(args,cwd,env)
 
 def sha(path):
@@ -78,11 +81,14 @@ def original_check(data):
     if data.count(b'headers = ?response.headers(),') != 2 or data.count(b'"Request completed"') != 2:
         raise RuntimeError('UNEXPECTED_EVENT_COUNT')
 
-def command(args, cwd, env=None, timeout=7200):
+def command(args, cwd, env=None, timeout=7200, *, http_test_names=False):
     p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, timeout=timeout)
     if p.returncode:
         # No arbitrary exception, compiler output, stdout, environment or payload export.
-        print(json.dumps({'diagnostic_categories':classify(p.stdout+p.stderr)}),flush=True)
+        if http_test_names:
+            print(json.dumps(failure_names(p.stdout)),flush=True)
+        else:
+            print(json.dumps({'diagnostic_categories':classify(p.stdout+p.stderr)}),flush=True)
         raise RuntimeError('COMMAND_FAILED')
     return p.stdout
 
