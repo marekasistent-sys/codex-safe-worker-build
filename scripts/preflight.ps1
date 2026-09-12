@@ -15,6 +15,12 @@ if (-not $nasm) {
 }
 if (-not $nasm) { throw 'MISSING_DEPENDENCY_NASM_NO_INSTALL_ATTEMPTED' }
 $nasmPath = if ($nasm.Source) { $nasm.Source } else { $nasm.FullName }
+$expectedNasm = Join-Path $env:GITHUB_WORKSPACE 'nasm-src\nasm.exe'
+if ([IO.Path]::GetFullPath($nasmPath) -ne [IO.Path]::GetFullPath($expectedNasm)) { throw 'NASM_SOURCE_BUILT_PATH_REQUIRED' }
+$nasmEvidence = Get-Content -LiteralPath (Join-Path $recipeRoot 'nasm-provenance.json') -Raw | ConvertFrom-Json
+$nasmVersion = (& $nasmPath --version)
+if ($LASTEXITCODE -ne 0 -or $nasmVersion -notmatch '^NASM version 3\.02(?:\s|$)') { throw 'NASM_302_REQUIRED' }
+if ($nasmEvidence.source_commit -ne '4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065' -or (Get-FileHash -LiteralPath $nasmPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $nasmEvidence.binary_sha256) { throw 'NASM_PROVENANCE_MISMATCH' }
 foreach ($tool in @('python','git','rustup')) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "MISSING_DEPENDENCY_$tool" }
 }
@@ -50,13 +56,13 @@ $metadata = [ordered]@{
     link_version = (Get-Item $link).VersionInfo.FileVersion
     selected_sdk = $sdk
     installed_sdk_versions = $allSdk
-    nasm_version = ((& $nasmPath -v) -join ' ')
+    nasm_version = $nasmVersion
+    nasm_source_build = $nasmEvidence
     git_version = ((& git --version) -join ' ')
 }
 if (-not $metadata.image_version) { throw 'MISSING_RUNNER_IMAGE_VERSION' }
 $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $inventoryPath -Encoding utf8
 # Job-local environment only, via the official Actions environment file.
-$env:PATH = (Split-Path $nasmPath -Parent) + ';' + $env:PATH
 foreach ($name in $allow) {
     $value = [Environment]::GetEnvironmentVariable($name)
     if ($value) {

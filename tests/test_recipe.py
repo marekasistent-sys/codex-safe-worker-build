@@ -65,13 +65,13 @@ class RecipeTests(unittest.TestCase):
         text=(ROOT/'.github/workflows/codex-safe.yml').read_text()
         import re
         pins=re.findall(r'uses:\s+([^\s]+)',text)
-        self.assertEqual(len(pins),4)
+        self.assertEqual(len(pins),5)
         self.assertTrue(all(re.fullmatch(r'[\w/-]+@[0-9a-f]{40}',p) for p in pins))
         self.assertIn('runs-on: windows-2022',text)
         self.assertIn('workflow_dispatch:',text)
         self.assertNotIn('pull_request:',text)
         self.assertNotIn('push:',text)
-        self.assertEqual(text.count('persist-credentials: false'),2)
+        self.assertEqual(text.count('persist-credentials: false'),3)
         self.assertNotIn('secrets.',text)
     def test_patch_only_logging(self):
         text=(ROOT/'logging.patch').read_text()

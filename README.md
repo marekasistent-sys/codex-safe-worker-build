@@ -16,7 +16,7 @@ This patch does not sanitize every Codex log. In particular, failure events, oth
 
 ## Workflow
 
-Only manual `workflow_dispatch`, a single `windows-2022` job, maximum 180 minutes, no matrix or automatic rerun. Permissions are `contents: read`; both checkouts use `persist-credentials: false`. No repository writes, deployment, signing, caching or OpenAI secrets. The ephemeral GitHub Actions token used by checkout/upload is GitHub infrastructure authorization; no personal access token is supplied to build/test children.
+Stage 3B.1 adds a pinned NASM source checkout and build before native preflight. Only manual `workflow_dispatch`, a single `windows-2022` job, maximum 180 minutes, no matrix or automatic rerun. Permissions are `contents: read`; all three checkouts use `persist-credentials: false`. No repository writes, deployment, signing, caching or OpenAI secrets. The ephemeral GitHub Actions token used by checkout/upload is GitHub infrastructure authorization; no personal access token is supplied to build/test children.
 
 Actions pinned exactly as in the upstream release recipe:
 
@@ -28,9 +28,9 @@ Actions pinned exactly as in the upstream release recipe:
 
 Evidence: [upstream release workflow](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/.github/workflows/rust-release.yml), [Windows workflow](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/.github/workflows/rust-release-windows.yml), [toolchain](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/codex-rs/rust-toolchain.toml).
 
-Preflight requires preinstalled VS 2022 x64 MSVC, SDK headers/libraries, NASM, Python, Git and rustup. It records runner image version, OS build, VS, cl/link file versions, selected and installed SDK versions, NASM and Git. Missing prerequisites stop the job without installation. The explicitly requested Rust action provisions Rust 1.95.0, target `x86_64-pc-windows-msvc`, upstream components clippy/rustfmt/rust-src. Exact rustc/cargo versions are checked afterward. No other tool installation, CMake or Ninja setup is present. Compiler environment changes are confined to the disposable job.
+Preflight requires preinstalled VS 2022 x64 MSVC, SDK headers/libraries, NMAKE, MSVC LIB, Perl, Python, Git and rustup; NASM is compiled in the disposable workspace. It records runner image version, OS build, VS, cl/link file versions, selected and installed SDK versions, NASM and Git. Missing prerequisites stop the job without installation. The explicitly requested Rust action provisions Rust 1.95.0, target `x86_64-pc-windows-msvc`, upstream components clippy/rustfmt/rust-src. Exact rustc/cargo versions are checked afterward. No other tool installation, CMake or Ninja setup is present. Compiler environment changes are confined to the disposable job.
 
-`windows-2022` is a moving hosted image label, not an immutable VM pin. VS/SDK patch versions are recorded rather than invented or silently installed. Upstream uses its own Windows runners; this hosted runner is not claimed identical. NASM availability and sufficient disk/RAM remain first-run gates. A missing tool requires a new decision, not an automatic bootstrap.
+`windows-2022` is a moving hosted image label, not an immutable VM pin. VS/SDK patch versions are recorded rather than invented or silently installed. Upstream uses its own Windows runners; this hosted runner is not claimed identical. Existing Perl/tool availability, NASM source compilation and sufficient disk/RAM remain gates. A missing tool requires a new decision, not an automatic bootstrap.
 
 Build command, from `codex-rs`:
 
@@ -81,3 +81,19 @@ Only files listed in `recipe-files.json` plus the manifest itself may be publish
 Planning estimate: 60–180 runner minutes for a cold build and tests, unmeasured; the job stops after 180 minutes and may fail for time/disk/memory. Standard hosted runners in public repositories are free under current policy. Private repositories consume plan allowance and then charge the repository owner; artifact storage is separate. Check the selected plan's current Windows rate and spending limit before approval. A rough compute illustration at $0.010/min is $0.60–$1.80 outside allowance, not a quote or guaranteed total. No billable run has occurred. [GitHub billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 
 Stage 3B authorization must identify repository owner/name, public/private visibility, approval to publish only the manifest allowlist, one manual workflow run, budget/time cap, and whether to add reviewed attestation support. Then: review final recipe commit; publish; dispatch once; monitor; fail closed on missing dependencies or failed tests; retrieve verified artifact metadata; report and stop. No automatic rerun, deployment, auth or model smoke. A failure needs diagnosis and a separately approved next run.
+
+## Stage 3B.1: NASM source dependency
+
+NASM repository: https://github.com/netwide-assembler/nasm
+Pinned commit: `4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065`.
+Checkout path: `nasm-src`, with the same full-SHA checkout action and no persisted credentials.
+
+The build step verifies HEAD, Git tree, clean checkout and `version` equal to 3.02. It imports the installed VS 2022 x64 developer environment for this process and requires existing `nmake.exe`, `cl.exe`, `link.exe`, `lib.exe` and `perl.exe`. It records Perl's version and executes only `nmake /f Mkfiles\msvc.mak`. The upstream default target builds nasm.exe and ndisasm.exe; only nasm.exe is used. Official Perl rules generate the files absent from Git; no manual upstream source changes, configure/bootstrap workaround, downloads or installation occur. Missing tools or any failed command stop the job without retry.
+
+After compilation, the step requires NASM version 3.02, rejects tracked source modifications and unexpected generated files, and records the generated file inventory, source commit/tree, compiler versions and binary SHA-256 in nasm-provenance.json. The NASM directory is appended only to GITHUB_PATH for later job steps. Native preflight verifies that the resolved NASM comes from nasm-src, runs --version and checks the binary hash against that evidence. Its runner metadata embeds the NASM evidence, so the existing provenance.json contains it without changing the four-file artifact allowlist. Neither NASM binaries nor the intermediate evidence file are uploaded separately.
+
+The original Codex patch, Rust version, build/test commands, synthetic HTTP test and artifact allowlist are unchanged. No new workflow run is authorized by publication itself. NASM compilation has not been exercised locally; local checks cover recipe integrity, syntax and safety contracts. A future run may still fail on a dependency or unexpected generated output and must not be retried automatically.
+
+Official pinned build references:
+- https://github.com/netwide-assembler/nasm/blob/4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065/INSTALL
+- https://github.com/netwide-assembler/nasm/blob/4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065/Mkfiles/msvc.mak

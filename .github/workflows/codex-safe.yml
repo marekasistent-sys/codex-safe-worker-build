@@ -36,7 +36,17 @@ jobs:
           path: upstream
           persist-credentials: false
           submodules: false
-      - name: Inventory installed native tools - fail if missing
+      - name: Checkout exact NASM 3.02 source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: netwide-assembler/nasm
+          ref: 4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065
+          path: nasm-src
+          persist-credentials: false
+          submodules: false
+      - name: Build job-local NASM with existing MSVC and Perl
+        run: ./recipe/scripts/build-nasm.ps1
+      - name: Inventory native tools and verify source-built NASM
         run: ./recipe/scripts/preflight.ps1
       - name: Exact upstream Rust toolchain action
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
