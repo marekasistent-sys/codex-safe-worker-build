@@ -53,9 +53,10 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
           components: clippy,rustfmt,rust-src
-      - name: Verify source, patch, build and run synthetic-only checks
-        run: python ./recipe/scripts/verify.py run --source ./upstream
+      - name: Diagnose pristine HTTP compilation only
+        run: python ./recipe/scripts/verify.py run --source ./upstream --pristine-only
       - name: Upload only verified release candidate
+        if: ${{ false }} # Diagnostic-only run produces no release candidate.
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: codex-safe-${{ github.run_id }}-${{ github.run_attempt }}

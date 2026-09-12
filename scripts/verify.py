@@ -13,6 +13,7 @@ import sys
 import tempfile
 from http_test_failures import failure_names
 from safe_cargo_json import summarize as cargo_json_summary
+from safe_cargo_stderr import classify_stderr
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = '3d2ee51ca2d5db578f328aa75e20aa22c0197c9a'
@@ -170,7 +171,7 @@ def install_synthetic_test(source):
         raise RuntimeError('SYNTHETIC_TEST_COLLISION')
     shutil.copyfile(ROOT / 'tests/worker_safe_logging.rs', destination)
 
-def compile_variant(label,cargo,cwd,env,target_dir):
+def compile_variant(label,cargo,cwd,env,target_dir,*,stderr_diagnostics=False):
     if label not in ('PRISTINE','PATCHED'):raise RuntimeError('DIAGNOSTIC_PHASE_INVALID')
     if target_dir.exists():raise RuntimeError('TARGET_DIR_NOT_FRESH')
     build_env=dict(env,CARGO_TARGET_DIR=str(target_dir))
@@ -180,6 +181,7 @@ def compile_variant(label,cargo,cwd,env,target_dir):
         result=subprocess.run(args,cwd=cwd,env=build_env,capture_output=True,timeout=7200)
     except (OSError,subprocess.TimeoutExpired):
         print(json.dumps(cargo_json_summary(b'')),flush=True)
+        if stderr_diagnostics:print('UNKNOWN',flush=True)
         print(label+'_HTTP_COMPILE_FAIL',flush=True)
         # Do not start another compile after an uncertain process outcome.
         raise RuntimeError('HTTP_DIFFERENTIAL_COMPILE_FAILED') from None
@@ -187,7 +189,9 @@ def compile_variant(label,cargo,cwd,env,target_dir):
     if ok:
         try:exe=http_test_binary(result.stdout,cwd,target_dir)
         except Exception:ok=False
-    if not ok:print(json.dumps(cargo_json_summary(result.stdout)),flush=True)
+    if not ok:
+        print(json.dumps(cargo_json_summary(result.stdout)),flush=True)
+        if stderr_diagnostics:print(classify_stderr(result.stderr),flush=True)
     print(label+'_HTTP_COMPILE_'+('PASS' if ok else 'FAIL'),flush=True)
     return ok,exe
 
@@ -226,7 +230,15 @@ def child_env():
                RUSTUP_TOOLCHAIN='1.95.0-x86_64-pc-windows-msvc', RUST_BACKTRACE='0')
     return env
 
-def run(source):
+def pristine_diagnostic(source,cargo,env,target_dir):
+    pristine_check(source)
+    lock_hash=sha(source/'codex-rs/Cargo.lock')
+    ok,_=compile_variant('PRISTINE',cargo,source/'codex-rs',env,target_dir,stderr_diagnostics=True)
+    pristine_check(source)
+    if sha(source/'codex-rs/Cargo.lock')!=lock_hash:raise RuntimeError('RECIPE_INTEGRITY_FAILED')
+    if not ok:raise RuntimeError('PRISTINE_DIAGNOSTIC_FAILED')
+
+def run(source,*,pristine_only=False):
     if os.environ.get('GITHUB_ACTIONS') != 'true':
         raise RuntimeError('REMOTE_RUN_REQUIRES_EXPLICITLY_DISPATCHED_ACTION')
     recipe_hashes = verify_bundle()
@@ -254,6 +266,9 @@ def run(source):
         (root / '.synthetic-only').write_text('synthetic only', encoding='utf-8')
         env['CODEX_HOME'] = str(root / 'empty-home')
         (root / 'empty-home').mkdir()
+        if pristine_only:
+            pristine_diagnostic(source,cargo,env,target_dir)
+            return
         base = [cargo, 'test', '--locked', '--release', '--target', TARGET]
         exe_http=differential_http_compile(source,cargo,env,target_dir)
         phase_command('HTTP_CLIENT_LIB_TEST',[str(exe_http)],cwd,env)
@@ -315,16 +330,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('mode', choices=['run','verify-bundle'])
     parser.add_argument('--source', type=Path)
+    parser.add_argument('--pristine-only',action='store_true')
     args = parser.parse_args()
     if args.mode == 'verify-bundle':
         verify_bundle(); print('RECIPE_INTEGRITY_PASS')
     else:
         if args.source is None:raise RuntimeError('SOURCE_REQUIRED')
-        run(args.source.resolve())
+        run(args.source.resolve(),pristine_only=args.pristine_only)
 
 
 SAFE_ERRORS=frozenset(('ARTIFACT_ALLOWLIST_FAILED','ARTIFACT_DIR_NOT_FRESH','COMMAND_FAILED','DIAGNOSTIC_PHASE_INVALID','HEADER_LOGGING_REMAINS','MISSING_RUST_TOOLCHAIN','PATCH_SCOPE_CHANGED','PINNED_SOURCE_FRAGMENT_MISMATCH','RECIPE_INTEGRITY_FAILED','RELEASE_BINARY_MISSING','REMOTE_RUN_REQUIRES_EXPLICITLY_DISPATCHED_ACTION','REPARSE_DENIED','RUST_VERSION_MISMATCH','SOURCE_COMMIT_MISMATCH','SOURCE_NOT_CLEAN','SOURCE_REQUIRED','SYNTHETIC_BINARY_NOT_FOUND','SYNTHETIC_BINARY_PATH_DENIED','SYNTHETIC_SECRET_DETECTED','SYNTHETIC_STDIO_LEAK','SYNTHETIC_SUMMARY_INVALID','SYNTHETIC_TEST_COLLISION','SYNTHETIC_TEST_FAILED_NO_PAYLOAD_EXPORTED','TARGET_DIR_NOT_FRESH','UNEXPECTED_EVENT_COUNT',)) | frozenset(n+'_FAILED' for n in PHASES)
 def safe_error(exc):
+    if type(exc) is RuntimeError and exc.args==('PRISTINE_DIAGNOSTIC_FAILED',):
+        return 'PRISTINE_DIAGNOSTIC_FAILED'
     if type(exc) is RuntimeError and exc.args==('HTTP_DIFFERENTIAL_COMPILE_FAILED',):
         return 'HTTP_DIFFERENTIAL_COMPILE_FAILED'
     if type(exc) is RuntimeError and len(exc.args)==1 and type(exc.args[0]) is str and exc.args[0] in SAFE_ERRORS:
