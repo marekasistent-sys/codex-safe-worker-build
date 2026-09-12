@@ -23,29 +23,18 @@ if ($LASTEXITCODE -ne 0 -or -not $instances) { throw 'MISSING_MSVC_NO_INSTALL' }
 $instance = $instances | Sort-Object { [version]$_.installationVersion } -Descending | Select-Object -First 1
 $devcmd = Join-Path $instance.installationPath 'Common7\Tools\VsDevCmd.bat'
 if (-not (Test-Path -LiteralPath $devcmd)) { throw 'MISSING_VSDEVCMD_NO_INSTALL' }
-$vars = & $env:ComSpec /d /s /c "call `"$devcmd`" -no_logo -arch=x64 -host_arch=x64 >nul && set"
-if ($LASTEXITCODE -ne 0) { throw 'NASM_VS_ENV_FAILED' }
-$allow = @('PATH','INCLUDE','LIB','LIBPATH','UCRTVersion','UniversalCRTSdkDir','VCToolsInstallDir','VCINSTALLDIR','WindowsSdkDir','WindowsSDKVersion','WindowsSDKLibVersion','WindowsSdkBinPath')
-foreach ($entry in $vars) {
-    if ($entry -match '^([^=]+)=(.*)$' -and $allow -contains $Matches[1]) {
-        [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process')
-    }
+# One cmd.exe owns VsDevCmd, both compile probes and NMAKE; no SET capture.
+$probeRoot = Join-Path $env:RUNNER_TEMP 'nasm-architecture'
+if (Test-Path -LiteralPath $probeRoot) { throw 'ARCHITECTURE_PROBE_DIR_NOT_FRESH' }
+New-Item -ItemType Directory -Path $probeRoot | Out-Null
+$sessionScript = Join-Path $PSScriptRoot 'nasm-session.cmd'
+foreach ($path in @($devcmd,$recipe,$source,$probeRoot,$sessionScript)) {
+    if ($path -match '[%!?&|<>^"\r\n]') { throw 'UNSAFE_CMD_ARGUMENT' }
 }
-$tools = @{}
-foreach ($name in @('nmake.exe','cl.exe','link.exe','lib.exe','perl.exe')) {
-    $tool = Get-Command $name -ErrorAction SilentlyContinue
-    if (-not $tool) { throw "MISSING_REQUIRED_TOOL_NO_INSTALL: $name" }
-    $tools[$name] = $tool.Source
-}
-$perlVersion = (& $tools['perl.exe'] -e 'print "$^V\n"')
-if ($LASTEXITCODE -ne 0 -or $perlVersion -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'PERL_VERSION_CHECK_FAILED' }
-
-# NMAKE's official rules are the only generator. Never patch or bootstrap upstream.
-Push-Location $source
-try {
-    & $tools['nmake.exe'] /f 'Mkfiles\msvc.mak'
-    if ($LASTEXITCODE -ne 0) { throw 'NASM_BUILD_FAILED_NO_RETRY_OR_INSTALL' }
-} finally { Pop-Location }
+& $env:ComSpec /d /s /c "call `"$sessionScript`" `"$devcmd`" `"$recipe`" `"$source`" `"$probeRoot`""
+if ($LASTEXITCODE -ne 0) { throw "NASM_SESSION_FAILED_NO_RETRY_EXIT_$LASTEXITCODE" }
+$session = Get-Content -LiteralPath (Join-Path $probeRoot 'native-session.json') -Raw | ConvertFrom-Json
+if ($session.build_variables.VSCMD_ARG_TGT_ARCH -ne 'x64' -or $session.build_variables.VSCMD_ARG_HOST_ARCH -ne 'x64') { throw 'NATIVE_SESSION_EVIDENCE_INVALID' }
 $binary = Join-Path $source 'nasm.exe'
 if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw 'NASM_BINARY_MISSING' }
 $version = (& $binary -v)
@@ -72,10 +61,12 @@ $metadata = [ordered]@{
     source_version = '3.02'
     build_command = 'nmake /f Mkfiles\msvc.mak'
     visual_studio_version = $instance.installationVersion
-    cl_version = (Get-Item $tools['cl.exe']).VersionInfo.FileVersion
-    link_version = (Get-Item $tools['link.exe']).VersionInfo.FileVersion
-    nmake_version = (Get-Item $tools['nmake.exe']).VersionInfo.FileVersion
-    perl_version = $perlVersion
+    cl_version = $session.cl_version
+    link_version = $session.link_version
+    nmake_version = $session.nmake_version
+    perl_version = $session.perl_version
+    native_session = $session
+    architecture_probe = 'PASS: intrinsic x64 macros and windows.h compile'
     generated_files = @($generated | Sort-Object)
     nasm_version = $version
     binary_sha256 = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()

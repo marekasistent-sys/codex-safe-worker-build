@@ -8,14 +8,14 @@ class NasmRecipeTests(unittest.TestCase):
     def test_pin_and_check_before_build(self):
         s=(ROOT/'scripts/build-nasm.ps1').read_text()
         self.assertIn('4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065',s)
-        build=s.index("& $tools['nmake.exe'] /f 'Mkfiles\\msvc.mak'")
-        for gate in ('NASM_COMMIT_MISMATCH','NASM_SOURCE_VERSION_MISMATCH','MISSING_REQUIRED_TOOL_NO_INSTALL','PERL_VERSION_CHECK_FAILED'):
+        build=s.index('& $env:ComSpec /d /s /c')
+        for gate in ('NASM_COMMIT_MISMATCH','NASM_SOURCE_VERSION_MISMATCH'):
             self.assertLess(s.index(gate),build)
         self.assertLess(s.index('NASM_BINARY_VERSION_MISMATCH'),s.index('$source | Out-File'))
         self.assertLess(s.index('NASM_UNEXPECTED_GENERATED_FILE'),s.index('$source | Out-File'))
     def test_provenance_and_no_download(self):
         s=(ROOT/'scripts/build-nasm.ps1').read_text()
-        for field in ('source_tree','source_commit','perl_version','generated_files','binary_sha256','cl_version','link_version'):
+        for field in ('source_tree','source_commit','perl_version','generated_files','binary_sha256','cl_version','link_version','native_session','architecture_probe'):
             self.assertIn(field,s)
         for command in ('Invoke-WebRequest','Invoke-RestMethod','Start-BitsTransfer','winget ','choco ','Expand-Archive'):
             self.assertNotIn(command,s)

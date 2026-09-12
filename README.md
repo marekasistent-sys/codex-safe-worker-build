@@ -97,3 +97,7 @@ The original Codex patch, Rust version, build/test commands, synthetic HTTP test
 Official pinned build references:
 - https://github.com/netwide-assembler/nasm/blob/4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065/INSTALL
 - https://github.com/netwide-assembler/nasm/blob/4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065/Mkfiles/msvc.mak
+
+## Stage 3B.2 architecture diagnostics
+
+See [ARCHITECTURE_DIAGNOSIS.md](ARCHITECTURE_DIAGNOSIS.md). NASM now builds in the same cmd.exe developer session as two fail-closed x64/Windows SDK compile probes. The environment is no longer reconstructed in PowerShell. This is diagnostic hardening: the existing failure may instead be the pinned NASM source including stringapiset.h without windows.h. No NASM source workaround is included, and this commit does not claim the failure is fixed. No new run was executed.
