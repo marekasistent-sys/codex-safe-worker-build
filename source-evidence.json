@@ -1,0 +1,45 @@
+{
+  "commit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+  "source_files": {
+    "codex-rs/http-client/src/route_aware_client_pool.rs": {
+      "git_blob": "29705e44eb66f235adee5a8932264ee778f98ced",
+      "sha256": "84c359cf3a279eed92fec966bf500826fd8d1d3b40366aa7e00ffc18b8b6ef55"
+    },
+    "codex-rs/http-client/src/chatgpt_cloudflare_cookies.rs": {
+      "git_blob": "a2abde31a9e241ffca7fbf1438b1be30be4ddadc",
+      "sha256": "a95bf7ca00c3da2448711cb8d320860dfec8955c8175fafa8e45c767ff36112d"
+    },
+    "codex-rs/http-client/src/client_builder.rs": {
+      "git_blob": "9f374293a1025c875bf0cc24be48c7201993c50c",
+      "sha256": "a135ed62bb9e55a8bf091a57d0c5760e3ad453776825d86b2a40300a3303667d"
+    },
+    "codex-rs/http-client/src/custom_ca.rs": {
+      "git_blob": "5a2e51c32068921eea2a07ceed5e0a35245280e1",
+      "sha256": "c796e150be2d0f93f4ac6620eac4324cfc5168f3eae1d80146a4690acd6fc776"
+    },
+    "codex-rs/http-client/src/tls_backend_fallback.rs": {
+      "git_blob": "760df1824ad752fe8d4b5f3f2b0d0e3e848c0144",
+      "sha256": "8a5e498a970be6971ac8525d875c7da20315ed5398c201e1b3545cf225439df2"
+    },
+    "codex-rs/http-client/src/transport.rs": {
+      "git_blob": "337b1e86759e230cc32823e50a98292a78c1b9d3",
+      "sha256": "77a3179491dbb8a1d8cd47b09396284cbd7fc27b6d3473ac8ca6ba996c77b74b"
+    },
+    "codex-rs/cli/Cargo.toml": {
+      "git_blob": "c94dd506622bb3f9d5f7733e683d9020e7efcccb",
+      "sha256": "e2c944b3d04278ef9c25e1a9e1e81e374a4e22c286d739dfc2e65320e53717a3"
+    },
+    ".github/workflows/rust-release.yml": {
+      "git_blob": "e07c23b3baa26749214cb300e937d028d93ec2cd",
+      "sha256": "8c617e18825d43d29d59af75419d9e7b40594256d3225c0cf39b7abde745a6c9"
+    },
+    ".github/workflows/rust-release-windows.yml": {
+      "git_blob": "234abf928433ed08723f176cf62938bad981b022",
+      "sha256": "64197ee29715bae16a3fd06a4a4522fc56814febe10981333d0ead3574217f9a"
+    },
+    "codex-rs/rust-toolchain.toml": {
+      "git_blob": "910c65114ec128a8317ee8257428451f3cd28230",
+      "sha256": "570656042681cfd8795403a455baf9a33035331a07db0645e866bbcea89a3d64"
+    }
+  }
+}

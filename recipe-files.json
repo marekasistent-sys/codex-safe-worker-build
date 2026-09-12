@@ -1,0 +1,11 @@
+{
+  ".github/workflows/codex-safe.yml": "8a449120d4c532c58a74497ae8e0af84dd5b89f8aee74bd15862b73ee4d4e1b5",
+  "logging.patch": "549f219c3b99b7abd4d7fa840b6558720c28987ad1f594cb71cde95c9e3ad8f2",
+  "README.md": "a1052932a18b929c5fe40acd39e7e93b261817d15ce9a2c5441fedb1cde70c24",
+  "scripts/postdownload.py": "8386e83e91df0198da64a793a7550c7ac322164719e38caf1e2b8fa3a928b348",
+  "scripts/preflight.ps1": "b71a27afe50b9322f08573863e0e5d59229f7ecf69d714fa7bd0c5f1b059fc42",
+  "scripts/verify.py": "c434af3c30faaf39bab03638fabc829c26be4cc35a7d0a7aedbcc94c62eb6266",
+  "source-evidence.json": "47fb2265293be57bb1f13165895d4b465f6d32b729b9859a56d2e7a520e3edab",
+  "tests/test_recipe.py": "786925cd14daed8643cea8a899a580a4d6962adc75063ff944388fb80baba539",
+  "tests/worker_safe_logging.rs": "d9c4e036f9a7bf546d5aa57535ebfe010bc42533cc4be12bc0c44f28645aad4f"
+}

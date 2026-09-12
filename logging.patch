@@ -1,0 +1,27 @@
+--- a/codex-rs/http-client/src/client.rs
++++ b/codex-rs/http-client/src/client.rs
+@@ -115,13 +115,11 @@
+         self.inner.execute(request).await
+     }
+ 
+-    pub(crate) fn log_response(&self, method: &Method, url: &str, response: &reqwest::Response) {
++    pub(crate) fn log_response(&self, method: &Method, _url: &str, response: &reqwest::Response) {
+         if self.request_logging == RequestLogging::Enabled {
+             tracing::debug!(
+                 method = %method,
+-                url = %url,
+                 status = %response.status(),
+-                headers = ?response.headers(),
+                 version = ?response.version(),
+                 "Request completed"
+             );
+@@ -251,9 +249,7 @@
+                 if self.request_logging == RequestLogging::Enabled {
+                     tracing::debug!(
+                         method = %self.method,
+-                        url = %self.url,
+                         status = %response.status(),
+-                        headers = ?response.headers(),
+                         version = ?response.version(),
+                         "Request completed"
+                     );

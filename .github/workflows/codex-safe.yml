@@ -1,0 +1,57 @@
+name: Codex safe logging - manual candidate build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: codex-safe-manual
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      LIBSQLITE3_FLAGS: SQLITE_DISABLE_INTRINSIC
+      CARGO_TERM_COLOR: never
+      CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - name: Checkout reviewed build recipe
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          path: recipe
+          persist-credentials: false
+      - name: Checkout exact public upstream source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: openai/codex
+          ref: 3d2ee51ca2d5db578f328aa75e20aa22c0197c9a
+          path: upstream
+          persist-credentials: false
+          submodules: false
+      - name: Inventory installed native tools - fail if missing
+        run: ./recipe/scripts/preflight.ps1
+      - name: Exact upstream Rust toolchain action
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc
+          components: clippy,rustfmt,rust-src
+      - name: Verify source, patch, build and run synthetic-only checks
+        run: python ./recipe/scripts/verify.py run --source ./upstream
+      - name: Upload only verified release candidate
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: codex-safe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: recipe/dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          include-hidden-files: false
