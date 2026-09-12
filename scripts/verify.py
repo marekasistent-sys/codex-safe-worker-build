@@ -20,7 +20,7 @@ SOURCE = Path('codex-rs/http-client/src/client.rs')
 ORIGINAL_BLOB = '9cda749aa27581101a4f718644151f88c508100d'
 STEPS = []
 PHASES = frozenset(('RUST_VERSION_PROBE','CARGO_VERSION_PROBE','SOURCE_PREPARE',
-    'HTTP_CLIENT_LIB_TEST','CODEX_CLI_LIB_COMPILE','SYNTHETIC_TEST_COMPILE',
+    'HTTP_CLIENT_LIB_COMPILE','HTTP_CLIENT_LIB_TEST','CODEX_CLI_LIB_COMPILE','SYNTHETIC_TEST_COMPILE',
     'SYNTHETIC_TEST','CODEX_RELEASE_BUILD'))
 
 @contextmanager
@@ -54,6 +54,42 @@ def phase_command(name,args,cwd,env):
             return command(args,cwd,env,http_test_names=True)
         return command(args,cwd,env)
 
+def http_test_binary(raw,cwd,target_dir):
+    candidates=[]
+    expected_source=(cwd/'http-client/src/lib.rs').resolve()
+    for line in raw.splitlines():
+        try:item=json.loads(line)
+        except ValueError:continue
+        if not isinstance(item,dict) or item.get('reason')!='compiler-artifact':continue
+        target=item.get('target',{})
+        if target.get('name')!='codex_http_client' or target.get('kind')!=['lib'] or item.get('profile',{}).get('test') is not True:continue
+        if Path(target.get('src_path','')).resolve()!=expected_source:continue
+        if item.get('executable'):candidates.append(Path(item['executable']))
+    if len(candidates)!=1:raise RuntimeError('HTTP_TEST_BINARY_INVALID')
+    exe=candidates[0]
+    expected_dir=(target_dir/TARGET/'release/deps').resolve()
+    if not exe.is_absolute() or exe.resolve().parent!=expected_dir or not re.fullmatch(r'codex_http_client-[0-9a-f]+\.exe',exe.name):
+        raise RuntimeError('HTTP_TEST_BINARY_INVALID')
+    # Reject reparse traversal even when its resolved destination is in target_dir.
+    for p in (exe,*exe.parents):
+        if p.is_symlink() or (hasattr(p,'is_junction') and p.is_junction()):
+            raise RuntimeError('HTTP_TEST_BINARY_INVALID')
+    if not exe.is_file():raise RuntimeError('HTTP_TEST_BINARY_INVALID')
+    return exe.resolve()
+
+def validate_http_client(cargo,cwd,env,target_dir):
+    with phase('HTTP_CLIENT_LIB_COMPILE'):
+        raw=command([cargo,'test','--locked','--release','--target',TARGET,
+                     '-p','codex-http-client','--lib','--no-run','--message-format=json'],cwd,env)
+        try:exe=http_test_binary(raw,cwd,target_dir)
+        except Exception:
+            print(json.dumps({'diagnostic_categories':['UNKNOWN']}),flush=True)
+            raise RuntimeError('HTTP_TEST_BINARY_INVALID') from None
+    STEPS.append('upstream_http_client_lib_compile_PASS')
+    # Direct execution: Cargo is not invoked a second time, so no implicit rebuild.
+    phase_command('HTTP_CLIENT_LIB_TEST',[str(exe)],cwd,env)
+    STEPS.append('upstream_http_client_lib_PASS')
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -82,7 +118,12 @@ def original_check(data):
         raise RuntimeError('UNEXPECTED_EVENT_COUNT')
 
 def command(args, cwd, env=None, timeout=7200, *, http_test_names=False):
-    p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, timeout=timeout)
+    try:
+        p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, timeout=timeout)
+    except (OSError,subprocess.TimeoutExpired):
+        print(json.dumps({'failed_tests':None,'failed_test_count':None} if http_test_names else
+                         {'diagnostic_categories':['UNKNOWN']}),flush=True)
+        raise
     if p.returncode:
         # No arbitrary exception, compiler output, stdout, environment or payload export.
         if http_test_names:
@@ -166,8 +207,7 @@ def run(source):
         env['CODEX_HOME'] = str(root / 'empty-home')
         (root / 'empty-home').mkdir()
         base = [cargo, 'test', '--locked', '--release', '--target', TARGET]
-        phase_command('HTTP_CLIENT_LIB_TEST',base + ['-p','codex-http-client','--lib'], cwd, env)
-        STEPS.append('upstream_http_client_lib_PASS')
+        validate_http_client(cargo,cwd,env,target_dir)
         phase_command('CODEX_CLI_LIB_COMPILE',base + ['-p','codex-cli','--lib','--no-run'], cwd, env)
         STEPS.append('codex_cli_lib_compile_PASS')
         raw = phase_command('SYNTHETIC_TEST_COMPILE',base + ['-p','codex-app-server','--test','worker_safe_logging','--no-run','--message-format=json'], cwd, env)
