@@ -60,7 +60,7 @@ class StderrTests(unittest.TestCase):
         self.assertEqual(run.call_count,1);self.assertNotIn('PRIVATE',out.getvalue())
     def test_workflow_diagnostic_mode_and_upload_disabled(self):
         source=(v.ROOT/'.github/workflows/codex-safe.yml').read_text()
-        self.assertIn('verify.py run --source ./upstream --pristine-only',source)
+        self.assertIn('verify.py run --source ./upstream --reconcile-lockfile',source)
         self.assertIn('if: ${{ false }}',source)
 
 if __name__=='__main__':unittest.main()

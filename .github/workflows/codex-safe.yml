@@ -45,16 +45,18 @@ jobs:
           persist-credentials: false
           submodules: false
       - name: Build job-local NASM with existing MSVC and Perl
+        if: ${{ false }} # Lockfile-only diagnosis does not compile native tools.
         run: ./recipe/scripts/build-nasm.ps1
       - name: Inventory native tools and verify source-built NASM
+        if: ${{ false }} # No native build is performed in reconciliation mode.
         run: ./recipe/scripts/preflight.ps1
       - name: Exact upstream Rust toolchain action
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
         with:
           targets: x86_64-pc-windows-msvc
           components: clippy,rustfmt,rust-src
-      - name: Diagnose pristine HTTP compilation only
-        run: python ./recipe/scripts/verify.py run --source ./upstream --pristine-only
+      - name: Reconcile release lockfile in disposable pristine source
+        run: python ./recipe/scripts/verify.py run --source ./upstream --reconcile-lockfile
       - name: Upload only verified release candidate
         if: ${{ false }} # Diagnostic-only run produces no release candidate.
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f

@@ -238,11 +238,11 @@ def pristine_diagnostic(source,cargo,env,target_dir):
     if sha(source/'codex-rs/Cargo.lock')!=lock_hash:raise RuntimeError('RECIPE_INTEGRITY_FAILED')
     if not ok:raise RuntimeError('PRISTINE_DIAGNOSTIC_FAILED')
 
-def run(source,*,pristine_only=False):
+def run(source,*,pristine_only=False,reconcile_lock=False):
     if os.environ.get('GITHUB_ACTIONS') != 'true':
         raise RuntimeError('REMOTE_RUN_REQUIRES_EXPLICITLY_DISPATCHED_ACTION')
     recipe_hashes = verify_bundle()
-    runner = json.loads((ROOT / 'runner.json').read_text(encoding='utf-8-sig'))
+    runner = {} if reconcile_lock else json.loads((ROOT / 'runner.json').read_text(encoding='utf-8-sig'))
     env = child_env()
     cargo = shutil.which('cargo', path=env['PATH'])
     rustc = shutil.which('rustc', path=env['PATH'])
@@ -253,6 +253,10 @@ def run(source,*,pristine_only=False):
     if not rust_version.startswith('rustc 1.95.0 ') or not cargo_version.startswith('cargo 1.95.0 '):
         raise RuntimeError('RUST_VERSION_MISMATCH')
     runner.update(rustc=rust_version, cargo=cargo_version)
+    if reconcile_lock:
+        from reconcile_lockfile import run as reconcile
+        reconcile(source,cargo,env)
+        return
     cwd = source / 'codex-rs'
     target_dir = Path(os.environ['RUNNER_TEMP']) / 'codex-safe-target'
     if target_dir.exists():
@@ -331,16 +335,23 @@ def main():
     parser.add_argument('mode', choices=['run','verify-bundle'])
     parser.add_argument('--source', type=Path)
     parser.add_argument('--pristine-only',action='store_true')
+    parser.add_argument('--reconcile-lockfile',action='store_true')
     args = parser.parse_args()
     if args.mode == 'verify-bundle':
         verify_bundle(); print('RECIPE_INTEGRITY_PASS')
     else:
         if args.source is None:raise RuntimeError('SOURCE_REQUIRED')
-        run(args.source.resolve(),pristine_only=args.pristine_only)
+        if args.pristine_only and args.reconcile_lockfile:raise RuntimeError('DIAGNOSTIC_PHASE_INVALID')
+        run(args.source.resolve(),pristine_only=args.pristine_only,reconcile_lock=args.reconcile_lockfile)
 
 
 SAFE_ERRORS=frozenset(('ARTIFACT_ALLOWLIST_FAILED','ARTIFACT_DIR_NOT_FRESH','COMMAND_FAILED','DIAGNOSTIC_PHASE_INVALID','HEADER_LOGGING_REMAINS','MISSING_RUST_TOOLCHAIN','PATCH_SCOPE_CHANGED','PINNED_SOURCE_FRAGMENT_MISMATCH','RECIPE_INTEGRITY_FAILED','RELEASE_BINARY_MISSING','REMOTE_RUN_REQUIRES_EXPLICITLY_DISPATCHED_ACTION','REPARSE_DENIED','RUST_VERSION_MISMATCH','SOURCE_COMMIT_MISMATCH','SOURCE_NOT_CLEAN','SOURCE_REQUIRED','SYNTHETIC_BINARY_NOT_FOUND','SYNTHETIC_BINARY_PATH_DENIED','SYNTHETIC_SECRET_DETECTED','SYNTHETIC_STDIO_LEAK','SYNTHETIC_SUMMARY_INVALID','SYNTHETIC_TEST_COLLISION','SYNTHETIC_TEST_FAILED_NO_PAYLOAD_EXPORTED','TARGET_DIR_NOT_FRESH','UNEXPECTED_EVENT_COUNT',)) | frozenset(n+'_FAILED' for n in PHASES)
 def safe_error(exc):
+    lock_errors=frozenset(('LOCK_STRUCTURE_REJECTED','LOCK_DIAGNOSTIC_PYTHON_UNSUPPORTED',
+        'LOCK_RECONCILIATION_COMMAND_FAILED','LOCK_ARCHIVE_SCOPE_REJECTED',
+        'LOCK_WORKSPACE_IDENTITY_REJECTED','LOCK_NON_LOCKFILE_CHANGE_REJECTED','LOCK_RECONCILIATION_REJECTED'))
+    if type(exc) is RuntimeError and len(exc.args)==1 and type(exc.args[0]) is str and exc.args[0] in lock_errors:
+        return exc.args[0]
     if type(exc) is RuntimeError and exc.args==('PRISTINE_DIAGNOSTIC_FAILED',):
         return 'PRISTINE_DIAGNOSTIC_FAILED'
     if type(exc) is RuntimeError and exc.args==('HTTP_DIFFERENTIAL_COMPILE_FAILED',):
