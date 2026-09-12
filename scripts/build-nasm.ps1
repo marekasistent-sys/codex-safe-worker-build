@@ -14,6 +14,13 @@ $status = (& git -C $source status --porcelain --untracked-files=all)
 if ($LASTEXITCODE -ne 0 -or $status) { throw 'NASM_SOURCE_NOT_CLEAN' }
 if ([IO.File]::ReadAllText((Join-Path $source 'version')).Trim() -ne '3.02') { throw 'NASM_SOURCE_VERSION_MISMATCH' }
 if (Test-Path -LiteralPath (Join-Path $recipe 'nasm-provenance.json')) { throw 'NASM_EVIDENCE_EXISTS' }
+$python = Get-Command python -ErrorAction SilentlyContinue
+if (-not $python) { throw 'MISSING_PYTHON_NO_INSTALL' }
+& $python.Source -B (Join-Path $PSScriptRoot 'nasm_backport.py') apply --source $source
+if ($LASTEXITCODE -ne 0) { throw 'NASM_BACKPORT_REJECTED' }
+# Emit only the reviewed public source diff before generated/build files exist.
+& git -C $source diff --no-ext-diff --no-color -- nasmlib/file.c
+if ($LASTEXITCODE -ne 0) { throw 'NASM_DIFF_FAILED' }
 
 # Use only the runner's installed VS 2022 developer environment, in this process.
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -39,8 +46,8 @@ $binary = Join-Path $source 'nasm.exe'
 if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw 'NASM_BINARY_MISSING' }
 $version = (& $binary -v)
 if ($LASTEXITCODE -ne 0 -or $version -notmatch '^NASM version 3\.02(?:\s|$)') { throw 'NASM_BINARY_VERSION_MISMATCH' }
-$trackedChanges = @(& git -C $source diff --name-only HEAD)
-if ($LASTEXITCODE -ne 0 -or $trackedChanges.Count -ne 0) { throw 'NASM_TRACKED_SOURCE_CHANGED' }
+& $python.Source -B (Join-Path $PSScriptRoot 'nasm_backport.py') verify --source $source
+if ($LASTEXITCODE -ne 0) { throw 'NASM_BACKPORT_CHANGED_DURING_BUILD' }
 $generated = @(& git -C $source ls-files --others)
 if ($LASTEXITCODE -ne 0) { throw 'NASM_GENERATED_INVENTORY_FAILED' }
 $generatedSources = @('msvc.dep','version.h','version.mac','version.mak','version.sed','nsis/version.nsh',
@@ -59,6 +66,10 @@ $metadata = [ordered]@{
     source_commit = $head
     source_tree = $tree
     source_version = '3.02'
+    upstream_fix_source = 'ace0078261329437224d4875b289647279a41fa1'
+    patched_file = 'nasmlib/file.c'
+    patch_sha256 = (Get-FileHash -LiteralPath (Join-Path $recipe 'nasm-windows-sdk.patch') -Algorithm SHA256).Hash.ToLowerInvariant()
+    patch_reason = 'official upstream Windows SDK compatibility fix'
     build_command = 'nmake /f Mkfiles\msvc.mak'
     visual_studio_version = $instance.installationVersion
     cl_version = $session.cl_version

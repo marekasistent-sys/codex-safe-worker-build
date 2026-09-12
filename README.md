@@ -101,3 +101,17 @@ Official pinned build references:
 ## Stage 3B.2 architecture diagnostics
 
 See [ARCHITECTURE_DIAGNOSIS.md](ARCHITECTURE_DIAGNOSIS.md). NASM now builds in the same cmd.exe developer session as two fail-closed x64/Windows SDK compile probes. The environment is no longer reconstructed in PowerShell. This is diagnostic hardening: the existing failure may instead be the pinned NASM source including stringapiset.h without windows.h. No NASM source workaround is included, and this commit does not claim the failure is fixed. No new run was executed.
+
+## Stage 3B.3 — exact upstream NASM Windows SDK backport
+
+The base remains NASM 3.02 commit `4a56d66ed9626d5a3ded5414c9d8b7f1a48ce065`.
+The only authorized tracked NASM source change is `nasmlib/file.c`, using the exact hunk from official upstream fix `ace0078261329437224d4875b289647279a41fa1`:
+https://github.com/netwide-assembler/nasm/commit/ace0078261329437224d4875b289647279a41fa1
+
+`nasm-windows-sdk.patch` replaces direct stringapiset.h inclusion with the complete upstream explanatory comment, WIN32_LEAN_AND_MEAN and windows.h. Its SHA-256 is `591d8b3fb2d85465b58212ac0eb7a4a31273a856a815c08031aaafdc5d95b863`. The patch initializes Windows SDK architecture context naturally; no architecture macro workaround, forced include or newer source graph is used.
+
+Before patching, the existing Python runtime verifies the base commit, clean source/index, patch hash, full file preimage hash and the exact three-line include fragment. Git apply must succeed without fallback. The resulting full file hash and tracked diff scope are checked before NMAKE and again after compilation. The public upstream source diff is logged before build generation. Additional tracked changes, mismatched images or a second patch application fail closed.
+
+NASM provenance adds base source, upstream fix commit, patched file, patch SHA-256 and reason: official upstream Windows SDK compatibility fix. The architecture probes and same developer session remain required. All Codex pins, safe-logging patch, build/tests and artifact upload restrictions are unchanged. Existing Python is required; nothing is installed. The older Stage 3B.2 diagnosis describes the unpatched baseline; this section authorizes only this upstream backport.
+
+Publication is preparation only. No fourth workflow run has been executed by the agent. Native success on this recipe remains to be verified by the user's next manually authorized run.

@@ -1,0 +1,29 @@
+diff --git a/nasmlib/file.c b/nasmlib/file.c
+--- a/nasmlib/file.c
++++ b/nasmlib/file.c
+@@ -45,7 +45,24 @@
+  */
+ #ifdef _WIN32
+ #include <wchar.h>
+-#include <stringapiset.h>
++/*
++ * <windows.h> is needed for MultiByteToWideChar()/CompareStringOrdinal()
++ * (normally declared via <stringapiset.h>).  Windows SDK headers like
++ * <stringapiset.h> are only guaranteed to work when pulled in through the
++ * normal <windows.h> pipeline, which sets up SDK-internal architecture
++ * macros (_X86_, _AMD64_, ...) derived from the compiler's own
++ * _M_IX86/_M_X64/etc; including such a leaf header directly can fail with
++ * a "No Target Architecture" #error from <winnt.h>.
++ *
++ * <windows.h> is deliberately *not* included from compiler.h: it #defines
++ * NEAR and FAR (as legacy no-op calling-convention keywords), which clash
++ * with NASM's own NEAR/FAR opflags bits from opflags.h.  Keep the
++ * inclusion local to the few files, like this one, that actually need
++ * Windows API declarations, and define WIN32_LEAN_AND_MEAN to keep the
++ * exposed surface (winsock, GDI, shell, DDE, RPC, crypto, ...) minimal.
++ */
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
+ 
+ typedef wchar_t *os_filename;
+ typedef wchar_t  os_fopenflag;
