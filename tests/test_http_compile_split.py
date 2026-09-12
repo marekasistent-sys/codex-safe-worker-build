@@ -26,7 +26,7 @@ class CompileSplitTests(unittest.TestCase):
             self.assertEqual(run.call_count,1)
             self.assertNotIn('HTTP_CLIENT_LIB_TEST_START',out.getvalue())
             self.assertNotIn('PRIVATE',out.getvalue())
-            self.assertIn('diagnostic_categories',out.getvalue())
+            self.assertIn('categories',out.getvalue())
     def test_compile_then_exact_binary_no_second_cargo(self):
         with tempfile.TemporaryDirectory() as td:
             cwd,target,exe,a=self.fixture(Path(td))

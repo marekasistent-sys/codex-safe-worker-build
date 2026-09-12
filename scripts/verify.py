@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 from http_test_failures import failure_names
+from safe_cargo_json import summarize as cargo_json_summary
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = '3d2ee51ca2d5db578f328aa75e20aa22c0197c9a'
@@ -128,6 +129,8 @@ def command(args, cwd, env=None, timeout=7200, *, http_test_names=False):
         # No arbitrary exception, compiler output, stdout, environment or payload export.
         if http_test_names:
             print(json.dumps(failure_names(p.stdout)),flush=True)
+        elif '--message-format=json' in args:
+            print(json.dumps(cargo_json_summary(p.stdout)),flush=True)
         else:
             print(json.dumps({'diagnostic_categories':classify(p.stdout+p.stderr)}),flush=True)
         raise RuntimeError('COMMAND_FAILED')
@@ -141,12 +144,15 @@ def verify_bundle():
             raise RuntimeError('RECIPE_INTEGRITY_FAILED')
     return manifest
 
-def prepare(source):
+def pristine_check(source):
     if command(['git', 'rev-parse', 'HEAD'], source).decode().strip() != COMMIT:
         raise RuntimeError('SOURCE_COMMIT_MISMATCH')
     if command(['git', 'status', '--porcelain'], source).strip():
         raise RuntimeError('SOURCE_NOT_CLEAN')
     original_check((source / SOURCE).read_bytes())
+
+def prepare(source,install_synthetic=True):
+    pristine_check(source)
     patch = ROOT / 'logging.patch'
     command(['git', 'apply', '--check', '--whitespace=error', str(patch)], source)
     command(['git', 'apply', '--whitespace=error', str(patch)], source)
@@ -156,10 +162,54 @@ def prepare(source):
         raise RuntimeError('PATCH_SCOPE_CHANGED')
     if b'headers = ?response.headers(),' in (source / SOURCE).read_bytes():
         raise RuntimeError('HEADER_LOGGING_REMAINS')
+    if install_synthetic:install_synthetic_test(source)
+
+def install_synthetic_test(source):
     destination = source / 'codex-rs/app-server/tests/worker_safe_logging.rs'
     if destination.exists():
         raise RuntimeError('SYNTHETIC_TEST_COLLISION')
     shutil.copyfile(ROOT / 'tests/worker_safe_logging.rs', destination)
+
+def compile_variant(label,cargo,cwd,env,target_dir):
+    if label not in ('PRISTINE','PATCHED'):raise RuntimeError('DIAGNOSTIC_PHASE_INVALID')
+    if target_dir.exists():raise RuntimeError('TARGET_DIR_NOT_FRESH')
+    build_env=dict(env,CARGO_TARGET_DIR=str(target_dir))
+    args=[cargo,'test','--locked','--release','--target',TARGET,
+          '-p','codex-http-client','--lib','--no-run','--message-format=json']
+    try:
+        result=subprocess.run(args,cwd=cwd,env=build_env,capture_output=True,timeout=7200)
+    except (OSError,subprocess.TimeoutExpired):
+        print(json.dumps(cargo_json_summary(b'')),flush=True)
+        print(label+'_HTTP_COMPILE_FAIL',flush=True)
+        # Do not start another compile after an uncertain process outcome.
+        raise RuntimeError('HTTP_DIFFERENTIAL_COMPILE_FAILED') from None
+    ok=result.returncode==0;exe=None
+    if ok:
+        try:exe=http_test_binary(result.stdout,cwd,target_dir)
+        except Exception:ok=False
+    if not ok:print(json.dumps(cargo_json_summary(result.stdout)),flush=True)
+    print(label+'_HTTP_COMPILE_'+('PASS' if ok else 'FAIL'),flush=True)
+    return ok,exe
+
+def differential_http_compile(source,cargo,env,target_dir):
+    pristine_check(source)
+    cwd=source/'codex-rs'
+    lock_hash=sha(cwd/'Cargo.lock')
+    pristine_dir=target_dir.with_name(target_dir.name+'-pristine')
+    pristine_ok,_=compile_variant('PRISTINE',cargo,cwd,env,pristine_dir)
+    # Recheck clean source after compilation; do not hide a build-script mutation.
+    pristine_check(source)
+    if sha(cwd/'Cargo.lock')!=lock_hash:raise RuntimeError('RECIPE_INTEGRITY_FAILED')
+    prepare(source,install_synthetic=False)
+    patched_hash=sha(source/SOURCE)
+    patched_ok,exe=compile_variant('PATCHED',cargo,cwd,env,target_dir)
+    if sha(source/SOURCE)!=patched_hash:raise RuntimeError('PATCH_SCOPE_CHANGED')
+    if sha(cwd/'Cargo.lock')!=lock_hash:raise RuntimeError('RECIPE_INTEGRITY_FAILED')
+    if command(['git','diff','--name-only'],source).decode().splitlines()!=[SOURCE.as_posix()]:
+        raise RuntimeError('PATCH_SCOPE_CHANGED')
+    if not pristine_ok or not patched_ok:raise RuntimeError('HTTP_DIFFERENTIAL_COMPILE_FAILED')
+    STEPS.extend(('pristine_http_compile_PASS','patched_http_compile_PASS'))
+    return exe
 
 def child_env():
     # Public Cargo downloads remain possible, but no GitHub/OpenAI tokens enter build/test children.
@@ -191,8 +241,6 @@ def run(source):
     if not rust_version.startswith('rustc 1.95.0 ') or not cargo_version.startswith('cargo 1.95.0 '):
         raise RuntimeError('RUST_VERSION_MISMATCH')
     runner.update(rustc=rust_version, cargo=cargo_version)
-    with phase('SOURCE_PREPARE'):
-        prepare(source)
     cwd = source / 'codex-rs'
     target_dir = Path(os.environ['RUNNER_TEMP']) / 'codex-safe-target'
     if target_dir.exists():
@@ -207,7 +255,10 @@ def run(source):
         env['CODEX_HOME'] = str(root / 'empty-home')
         (root / 'empty-home').mkdir()
         base = [cargo, 'test', '--locked', '--release', '--target', TARGET]
-        validate_http_client(cargo,cwd,env,target_dir)
+        exe_http=differential_http_compile(source,cargo,env,target_dir)
+        phase_command('HTTP_CLIENT_LIB_TEST',[str(exe_http)],cwd,env)
+        STEPS.append('upstream_http_client_lib_PASS')
+        install_synthetic_test(source)
         phase_command('CODEX_CLI_LIB_COMPILE',base + ['-p','codex-cli','--lib','--no-run'], cwd, env)
         STEPS.append('codex_cli_lib_compile_PASS')
         raw = phase_command('SYNTHETIC_TEST_COMPILE',base + ['-p','codex-app-server','--test','worker_safe_logging','--no-run','--message-format=json'], cwd, env)
@@ -274,6 +325,8 @@ def main():
 
 SAFE_ERRORS=frozenset(('ARTIFACT_ALLOWLIST_FAILED','ARTIFACT_DIR_NOT_FRESH','COMMAND_FAILED','DIAGNOSTIC_PHASE_INVALID','HEADER_LOGGING_REMAINS','MISSING_RUST_TOOLCHAIN','PATCH_SCOPE_CHANGED','PINNED_SOURCE_FRAGMENT_MISMATCH','RECIPE_INTEGRITY_FAILED','RELEASE_BINARY_MISSING','REMOTE_RUN_REQUIRES_EXPLICITLY_DISPATCHED_ACTION','REPARSE_DENIED','RUST_VERSION_MISMATCH','SOURCE_COMMIT_MISMATCH','SOURCE_NOT_CLEAN','SOURCE_REQUIRED','SYNTHETIC_BINARY_NOT_FOUND','SYNTHETIC_BINARY_PATH_DENIED','SYNTHETIC_SECRET_DETECTED','SYNTHETIC_STDIO_LEAK','SYNTHETIC_SUMMARY_INVALID','SYNTHETIC_TEST_COLLISION','SYNTHETIC_TEST_FAILED_NO_PAYLOAD_EXPORTED','TARGET_DIR_NOT_FRESH','UNEXPECTED_EVENT_COUNT',)) | frozenset(n+'_FAILED' for n in PHASES)
 def safe_error(exc):
+    if type(exc) is RuntimeError and exc.args==('HTTP_DIFFERENTIAL_COMPILE_FAILED',):
+        return 'HTTP_DIFFERENTIAL_COMPILE_FAILED'
     if type(exc) is RuntimeError and len(exc.args)==1 and type(exc.args[0]) is str and exc.args[0] in SAFE_ERRORS:
         return exc.args[0]
     return 'FAIL_CLOSED_NO_PAYLOAD_EXPORTED'
